@@ -1,0 +1,615 @@
+package dao.impl;
+
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.net.URLDecoder;
+import java.sql.Blob;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.Statement;
+
+import org.apache.commons.codec.binary.Base64;
+
+import dao.IObjectDAO;
+import javafx.util.Pair;
+import net.sf.json.JSONArray;
+import net.sf.json.JSONObject;
+import vo.GenericPair;
+
+public class ObjectDAOImpl implements IObjectDAO{
+
+	private Connection conn=null;
+	
+	public ObjectDAOImpl(Connection conn) {
+		this.conn=conn;
+	}
+	
+	public static byte[] blobToBytes(Blob blob) {  
+        BufferedInputStream is = null;  
+        try {  
+            is = new BufferedInputStream(blob.getBinaryStream());  
+            byte[] bytes = new byte[(int) blob.length()];  
+            int len = bytes.length;  
+            int offset = 0;  
+            int read = 0;  
+            while (offset < len && (read = is.read(bytes, offset, len - offset)) >= 0) {  
+                offset += read;  
+            }  
+            return bytes;  
+        } catch (Exception e) {  
+            return null;  
+        } finally {  
+            try {  
+                is.close();  
+                is = null;  
+            } catch (IOException e) {  
+                return null;  
+            }  
+        }  
+    }  
+	
+	@Override
+	public String resultSetToJson(ResultSet resultSet) throws Exception {
+		JSONArray array = new JSONArray();
+	    
+		   // 获取列数  
+		   ResultSetMetaData metaData = resultSet.getMetaData();  
+		   int columnCount = metaData.getColumnCount();  
+		   // 遍历ResultSet中的每条数据  
+		    while (resultSet.next()) {  
+		        JSONObject jsonObj = new JSONObject();  
+		         
+		        // 遍历每一列  
+		        for (int i = 1; i <= columnCount; i++) {  
+		            String columnName =metaData.getColumnLabel(i);  
+		            String value="";
+		            if(columnName.indexOf("img")==-1 && columnName.indexOf("logo")==-1){
+		            	value = resultSet.getString(columnName);  
+		            }
+		            else {
+		            	byte[] bs=blobToBytes(resultSet.getBlob(columnName));
+				        value=new String(Base64.encodeBase64(bs));
+					}
+		            
+		            jsonObj.put(columnName, value);  
+		        }   
+		        array.add(jsonObj); 
+		    }  
+		    
+		   return array.toString();  
+	}
+	
+
+	@Override
+	public String initAlbumList() throws Exception{
+		//专辑列表
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select a_id,a_name,a_img from album";
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String initAlbumCard(int album_id) throws Exception {
+		//初始化专辑信息
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select a_id,a_img,a_name,a_price,a_rel_date,si_id,si_name "
+					+ "from album,singer "
+					+ "where a_si_id=si_id "
+					+ "and a_id="+album_id;
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String initSongList(int al_id) throws Exception {
+		//初始化对应专辑的歌曲列表
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select so_id,so_name,al_id,a_img "
+					+ " from song,album "
+					+ " where al_id="+al_id
+					+ " and al_id=a_id";
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String initSongInfo(int so_id) throws Exception {
+		//初始化对应歌曲的信息
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select so_id,so_name,so_lang,so_time,a_img "
+					+ " from song,album "
+					+ " where so_id="+so_id
+					+ " and al_id=a_id";
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String initGrade(int so_id) throws Exception {
+		//初始化对应歌曲的评论列表
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select g_id,g_score1,g_score2,g_score3,g_content,g_date,u_id,u_name,so_id,so_name,u_img "
+					+ "from grade,song,user "
+					+ "where so_id="+so_id
+					+ " and g_so_id=so_id "
+					+ " and g_u_id=u_id";
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public boolean addGrade(String info) throws Exception {
+		//添加评论
+		try {
+			JSONObject jsonObject = JSONObject.fromObject(info);
+			String g_score1=jsonObject.getString("g_score1");
+			String g_score2=jsonObject.getString("g_score2");
+			String g_score3=jsonObject.getString("g_score3");
+			String g_content = URLDecoder.decode(jsonObject.getString("g_content"), "UTF-8");
+			String g_date=jsonObject.getString("g_date");
+			String g_u_id=jsonObject.getString("g_u_id");
+			String g_so_id=jsonObject.getString("g_so_id");
+			Statement statement=conn.createStatement();
+			String sqlUpdate="insert into grade "
+					+ " (g_content,g_date,g_u_id,g_so_id,g_score1,g_score2,g_score3) "
+					+ " values('"+g_content+"','"+g_date+"',"+g_u_id+","+g_so_id+","+g_score1+","+g_score2+","+g_score3+")";
+			if(statement.executeUpdate(sqlUpdate)!=0)
+				return true;
+			else
+				return false;
+		} catch (Exception e) {
+			throw e;
+		}
+	}
+
+	@Override
+	public String getUserInfo(int u_id) throws Exception{
+		//填充用户界面
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select u_id,u_name,u_email,u_mobile,u_img "
+					+ " from user "
+					+ " where u_id="+u_id;
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String getUserGradeList(int u_id) throws Exception {
+		//指定用户的评论列表
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select so_name,g_score1,g_score2,g_score3,g_content "
+					+ " from grade,song "
+					+ " where g_u_id="+u_id
+					+ " and g_so_id=so_id";
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String addFavUser(int u_id,int fav_u_id) throws Exception {
+		//添加关注用户
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select u_id,fav_u_id "
+					+ " from user_fav_u "
+					+ " where u_id="+u_id
+					+ " and fav_u_id="+fav_u_id;
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			if(resultSet.next())
+				return "exist";
+			
+			String sqlUpdate="insert into user_fav_u "
+					+ " values("+u_id+","+fav_u_id+")";
+			if(statement.executeUpdate(sqlUpdate)!=0)
+				return "succeed";
+			else
+				return "failed";
+		} catch (Exception e) {
+			throw e;
+		}
+	}
+
+	@Override
+	public String addFavGrade(int u_id, int fav_g_id) throws Exception {
+		//添加收藏评论
+		try {
+			//查询是否已存在
+			Statement statement=conn.createStatement();
+			String sqlQuery="select u_id,fav_g_id "
+					+ " from user_fav_grade "
+					+ " where u_id="+u_id
+					+ " and fav_g_id="+fav_g_id;
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			if(resultSet.next())
+				return "exist";
+			
+			//不存在则插入
+			String sqlUpdate="insert into user_fav_grade "
+					+ " values("+u_id+","+fav_g_id+")";
+			if(statement.executeUpdate(sqlUpdate)!=0)
+				return "succeed";
+			else
+				return "failed";
+		} catch (Exception e) {
+			throw e;
+		}
+	}
+
+	@Override
+	public String initSingerInfo(int si_id) throws Exception {
+		//初始化歌手信息
+		String jsonStr="";
+		try {
+			//查询是否已存在
+			Statement statement=conn.createStatement();
+			String sqlQuery="select si_id,si_name,si_sex,si_brithdate,co_id,co_name,st_id,st_name,si_img "
+					+ " from singer,company,style "
+					+ " where si_id="+si_id
+					+ " and si_co_id=co_id"
+					+ " and si_st_id=st_id";
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public Pair<String, Integer> searchSingleString(String str) throws Exception {
+		Pair<String, Integer> pair;
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select si_id "
+					+ " from singer "
+					+ " where si_name='"+str+"'";
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			if(resultSet.next()){
+				pair=new Pair<String, Integer>("singer",resultSet.getInt("si_id"));
+			}else{
+				sqlQuery="select a_id "
+						+ " from album "
+						+ " where a_name='"+str+"'";
+				ResultSet resultSet2=statement.executeQuery(sqlQuery);
+				if(resultSet2.next()){
+					pair=new Pair<String, Integer>("album",resultSet2.getInt("a_id"));
+				}else{
+					sqlQuery="select so_id "
+							+ " from song "
+							+ " where so_name='"+str+"'";
+					ResultSet resultSet3=statement.executeQuery(sqlQuery);
+					if(resultSet3.next()){
+						pair=new Pair<String, Integer>("song",resultSet3.getInt("so_id"));
+					}
+					else{
+						sqlQuery="select u_id "
+								+ " from user "
+								+ " where u_name='"+str+"'"; 
+						ResultSet resultSet4=statement.executeQuery(sqlQuery);
+						if(resultSet4.next()){
+							pair=new Pair<String, Integer>("user",resultSet4.getInt("u_id"));
+						}
+						else{
+							sqlQuery="select st_id "
+									+ " from style "
+									+ " where st_name='"+str+"'";
+							ResultSet resultSet5=statement.executeQuery(sqlQuery);
+							if(resultSet5.next()){
+								pair=new Pair<String, Integer>("style", resultSet5.getInt("st_id"));
+							}else{
+								sqlQuery="select co_id "
+										+ " from company "
+										+ " where co_name='"+str+"'";
+								ResultSet resultSet6=statement.executeQuery(sqlQuery);
+								if(resultSet6.next()){
+									pair=new Pair<String, Integer>("company", resultSet6.getInt("co_id"));
+								}else{
+									pair=new Pair<String, Integer>("error",0);
+								}
+							}
+						}
+						
+					}
+				}
+			}
+		} catch (Exception e) {
+			throw e;
+		}
+		return pair;
+	}
+
+	@Override
+	public GenericPair<String, String> searchList(String[] strings) throws Exception {
+		GenericPair<String, String> pair=new GenericPair<String, String>();
+		Pair<String, Integer> s_Pair;
+		String jsonStr="";
+		Statement statement=conn.createStatement();
+		String sqlQuery="";
+		ResultSet resultSet;
+		try {
+			switch (strings[1]) {
+			case "歌曲列表":
+				//找到具体的某个方向
+				//依次查看查询是否是指定歌手、专辑、流派的歌曲列表
+				sqlQuery="select si_id "
+						+ " from singer "
+						+ " where si_name='"+strings[0]+"'";
+				resultSet=statement.executeQuery(sqlQuery);
+				if(resultSet.next()){
+					s_Pair=new Pair<String, Integer>("singer",resultSet.getInt("si_id"));
+				}else{
+					sqlQuery="select a_id "
+							+ " from album "
+							+ " where a_name='"+strings[0]+"'";
+					ResultSet resultSet2=statement.executeQuery(sqlQuery);
+					if(resultSet2.next()){
+						s_Pair=new Pair<String, Integer>("album",resultSet2.getInt("a_id"));
+					}else{
+						sqlQuery="select st_id "
+								+ " from style "
+								+ " where st_name='"+strings[0]+"'";
+						ResultSet resultSet3=statement.executeQuery(sqlQuery);
+						if(resultSet3.next()){
+							s_Pair=new Pair<String, Integer>("style",resultSet3.getInt("st_id"));
+						}
+						else{
+							s_Pair=new Pair<String, Integer>("error",0);
+						}
+					}
+				}
+				//查询列表
+				switch (s_Pair.getKey()) {
+				case "singer":
+					sqlQuery="select so_id,so_name "
+							+ " from si_so_view "
+							+ " where si_id="+s_Pair.getValue();
+					ResultSet resultSet2=statement.executeQuery(sqlQuery);
+					jsonStr=resultSetToJson(resultSet2);
+					break;
+				case "album":
+					sqlQuery="select so_id,so_name "
+							+ " from al_so_view "
+							+ " where a_id="+s_Pair.getValue();
+					ResultSet resultSet3=statement.executeQuery(sqlQuery);
+					jsonStr=resultSetToJson(resultSet3);
+					break;
+				case "style":
+					sqlQuery="select so_id,so_name "
+							+ " from st_so_view "
+							+ " where st_id="+s_Pair.getValue();
+					ResultSet resultSet4=statement.executeQuery(sqlQuery);
+					jsonStr=resultSetToJson(resultSet4);
+					break;
+				case "user":
+					sqlQuery="select u_id,u_name"
+							+ " from user "
+							+ " where u_id="+s_Pair.getValue(); 
+				case "error":
+					jsonStr="[]";
+					break;
+				default:
+					break;
+				}
+				if((jsonStr.equals("[]"))){
+					pair.setFirst("error");
+				}
+				else{
+					pair.setFirst("song_list");
+				}
+				pair.setSecond(jsonStr);
+				break;
+			case "专辑列表":
+				sqlQuery="select a_id,a_name "
+						+ " from album,singer "
+						+ " where a_si_id=si_id "
+						+ " and si_name='"+strings[0]+"'";
+				ResultSet resultSet5=statement.executeQuery(sqlQuery);
+				jsonStr=resultSetToJson(resultSet5);
+				if((jsonStr.equals("[]"))){
+					pair.setFirst("error");
+				}
+				else{
+					pair.setFirst("album_list");
+				}
+				
+				pair.setSecond(jsonStr);
+				break;
+			case "歌手列表":
+				sqlQuery="select co_id "
+						+ " from company "
+						+ " where co_name='"+strings[0]+"'";
+				ResultSet resultSet2=statement.executeQuery(sqlQuery);
+				if(resultSet2.next()){
+					s_Pair=new Pair<String, Integer>("company", resultSet2.getInt("co_id"));
+				}else{
+					sqlQuery="select st_id "
+							+ " from style "
+							+ " where st_name='"+strings[0]+"'";
+					ResultSet resultSet3=statement.executeQuery(sqlQuery);
+					if(resultSet3.next()){
+						s_Pair=new Pair<String, Integer>("style", resultSet3.getInt("st_id"));
+					}else{
+						s_Pair=new Pair<String, Integer>("error", 0);
+					}
+				}
+				
+				switch (s_Pair.getKey()) {
+				case "company":
+					sqlQuery="select si_id,si_name "
+							+ " from singer "
+							+ " where si_co_id="+s_Pair.getValue();
+					ResultSet resultSet6=statement.executeQuery(sqlQuery);
+					jsonStr=resultSetToJson(resultSet6);
+					break;
+				case "style":
+					sqlQuery="select si_id,si_name "
+							+ " from singer "
+							+ " where si_st_id="+s_Pair.getValue();
+					ResultSet resultSet7=statement.executeQuery(sqlQuery);
+					jsonStr=resultSetToJson(resultSet7);
+					break;
+				case "error":
+					jsonStr="\"error\"";
+					break;
+				}
+				if((jsonStr.equals("[]"))){
+					pair.setFirst("error");
+				}
+				else{
+					pair.setFirst("singer_list");
+				}
+				
+				pair.setSecond(jsonStr);
+				break;
+			default:
+				pair.setFirst("error");
+				pair.setSecond("\"error\"");
+				break;
+			}
+		} catch (Exception e) {
+			throw e;
+		}
+		return pair;
+	}
+
+	@Override
+	public String initStyleInfo(int st_id) throws Exception {
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select st_name,st_intro,st_img "
+					+ " from style "
+					+ " where st_id="+st_id;
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String getFavUserList(int u_id) throws Exception {
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select fav_u_id,u_name,u_img "
+					+ " from user,user_fav_u "
+					+ " where user_fav_u.u_id="+u_id
+					+ " and user_fav_u.fav_u_id=user.u_id";
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String initCompanyInfo(int co_id) throws Exception {
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select co_id,co_name,co_addr,co_logo "
+					+ " from company "
+					+ " where co_id="+co_id;
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String getSongScores(int so_id) throws Exception {
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select so_score1,so_score2,so_score3 "
+					+ " from song "
+					+ " where so_id="+so_id;
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String initSingerList() throws Exception {
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select si_id,si_name,si_img from singer";
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String getFavGradeList(int u_id) throws Exception {
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="SELECT g_id,g_score1,g_score2,g_score3,g_content,g_date,u_id,u_name,u_img,so_id,so_name "
+					+ " FROM grade,user_fav_grade,user,song "
+					+ " where f_u_id="+u_id
+					+ " and fav_g_id=g_id"
+					+ " and f_u_id=u_id";
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+}

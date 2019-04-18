@@ -1,0 +1,79 @@
+package servlet;
+
+import java.io.IOException;
+import java.io.PrintWriter;
+
+import javax.servlet.ServletException;
+import javax.servlet.annotation.WebServlet;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import factory.DAOFactory;
+
+/**
+ * Servlet implementation class UserServlet
+ */
+@WebServlet("/UserServlet")
+public class UserServlet extends HttpServlet {
+	private static final long serialVersionUID = 1L;
+       
+    /**
+     * @see HttpServlet#HttpServlet()
+     */
+    public UserServlet() {
+        super();
+        // TODO Auto-generated constructor stub
+    }
+
+	/**
+	 * @see HttpServlet#doGet(HttpServletRequest request, HttpServletResponse response)
+	 */
+	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+		String code=request.getParameter("code");
+		int u_id=Integer.parseInt(request.getParameter("u_id"));
+		System.out.println("get request: "+code);
+		String jsonStr="";
+	    try {
+	    	switch (code) {
+			case "user_info":
+				jsonStr=DAOFactory.getIObjectDAOInstance().getUserInfo(u_id);
+				break;
+			case "user_grade_list":
+				jsonStr=DAOFactory.getIObjectDAOInstance().getUserGradeList(u_id);
+				break;
+			case "add_fav_user":
+				int fav_u_id=Integer.parseInt(request.getParameter("fav_u_id"));
+				jsonStr=DAOFactory.getIObjectDAOInstance().addFavUser(u_id, fav_u_id);
+				break;
+			case "add_fav_grade":
+				int fav_g_id=Integer.parseInt(request.getParameter("fav_g_id"));
+				jsonStr=DAOFactory.getIObjectDAOInstance().addFavGrade(u_id, fav_g_id);
+				break;
+			case "fav_user_list":
+				jsonStr=DAOFactory.getIObjectDAOInstance().getFavUserList(u_id);
+				break;
+			default:
+				break;
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	    
+	    response.setContentType("application/json;charset=utf-8");//指定返回的格式为JSON格式  
+	    response.setCharacterEncoding("UTF-8");//setContentType与setCharacterEncoding的顺序不能调换，否则还是无法解决中文乱码的问题  
+	    PrintWriter out =null ;  
+	    out =response.getWriter();
+	    out.write(jsonStr);  
+	    out.close();  
+	}
+
+	/**
+	 * @see HttpServlet#doPost(HttpServletRequest request, HttpServletResponse response)
+	 */
+	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+		// TODO Auto-generated method stub
+		doGet(request, response);
+	}
+
+}

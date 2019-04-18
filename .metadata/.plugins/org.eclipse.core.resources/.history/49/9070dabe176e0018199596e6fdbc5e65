@@ -1,0 +1,148 @@
+package dao.impl;
+
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.Statement;
+
+import dao.IObjectDAO;
+import net.sf.json.JSONArray;
+import net.sf.json.JSONObject;
+
+public class ObjectDAOImpl implements IObjectDAO{
+
+	private Connection conn=null;
+	
+	public ObjectDAOImpl(Connection conn) {
+		this.conn=conn;
+	}
+	
+	@Override
+	public String resultSetToJson(ResultSet resultSet) throws Exception {
+		JSONArray array = new JSONArray();
+	    
+		   // 获取列数  
+		   ResultSetMetaData metaData = resultSet.getMetaData();  
+		   int columnCount = metaData.getColumnCount();  
+		    
+		   // 遍历ResultSet中的每条数据  
+		    while (resultSet.next()) {  
+		        JSONObject jsonObj = new JSONObject();  
+		         
+		        // 遍历每一列  
+		        for (int i = 1; i <= columnCount; i++) {  
+		            String columnName =metaData.getColumnLabel(i);  
+		            String value = resultSet.getString(columnName);  
+		            jsonObj.put(columnName, value);  
+		        }   
+		        array.add(jsonObj); 
+		    }  
+		    
+		   return array.toString();  
+	}
+	
+
+	@Override
+	public String initAlbumList() throws Exception{
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select a_id,a_img,a_name from album";
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String initAlbumCard(int album_id) throws Exception {
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select a_id,a_img,a_name,a_price,a_rel_date,si_name "
+					+ "from album,singer "
+					+ "where a_si_id=si_id "
+					+ "and a_id="+album_id;
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String initSongList(int al_id) throws Exception {
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select so_id,so_name "
+					+ "from song "
+					+ "where al_id="+al_id;
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String initSongInfo(int so_id) throws Exception {
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select so_id,so_name,so_lang,so_time "
+					+ "from song "
+					+ "where so_id="+so_id;
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public String initGrade(int so_id) throws Exception {
+		String jsonStr="";
+		try {
+			Statement statement=conn.createStatement();
+			String sqlQuery="select g_id,g_score,g_content,g_date,u_id,u_name,so_id,so_name,u_img "
+					+ "from grade,song,user "
+					+ "where so_id="+so_id
+					+ " and g_so_id=so_id "
+					+ " and g_u_id=u_id";
+			ResultSet resultSet=statement.executeQuery(sqlQuery);
+			jsonStr=resultSetToJson(resultSet);
+		} catch (Exception e) {
+			throw e;
+		}
+		return jsonStr;
+	}
+
+	@Override
+	public boolean addGrade(String info) throws Exception {
+		try {
+			JSONObject jsonObject = JSONObject.fromObject(info);
+			String g_score=jsonObject.getString("g_score");
+			String g_content=jsonObject.getString("g_content");
+			String g_date=jsonObject.getString("g_date");
+			String g_u_id=jsonObject.getString("g_u_id");
+			String g_so_id=jsonObject.getString("g_so_id");
+			Statement statement=conn.createStatement();
+			String sqlUpdate="insert into grade "
+					+ " (g_score,g_content,g_date,g_u_id,g_so_id "
+					+ " values("+g_score+",\""+g_content+"\","+g_date+","+g_u_id+","+g_so_id+")";
+			if(statement.executeUpdate(sqlUpdate)!=0)
+				return true;
+			else
+				return false;
+		} catch (Exception e) {
+			throw e;
+		}
+	}
+
+}
